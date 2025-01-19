@@ -9,7 +9,7 @@ cat_to_name_path = os.path.join(dataset_dir, 'cat_to_name.json')
 with open(cat_to_name_path, 'r') as f:
     cat_to_name = json.load(f)
 
-model = tf.keras.models.load_model('coin_classifier_final.h5')
+model = tf.keras.models.load_model('coin_classifier_final.keras')
 
 def predict_coin(image_path):
     img = image.load_img(image_path, target_size=(224, 224))

@@ -2,3 +2,4 @@ myenv/
 coins/
 __pycache__/
 *.h5
+*.keras

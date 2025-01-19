@@ -3,7 +3,8 @@ import json
 import tensorflow as tf
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras import layers, models
-from tensorflow.keras.callbacks import ModelCheckpoint
+from tensorflow.keras.applications import ResNet50
+from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
 
 dataset_dir = os.path.join('coins', 'data')
 cat_to_name_path = os.path.join(dataset_dir, 'cat_to_name.json')
@@ -15,20 +16,20 @@ train_dir = os.path.join(dataset_dir, 'train')
 test_dir = os.path.join(dataset_dir, 'test')
 val_dir = os.path.join(dataset_dir, 'validation')
 
+batch_size = 60
+
 train_datagen = ImageDataGenerator(
     rescale=1./255,
     rotation_range=40,
     width_shift_range=0.1, 
     height_shift_range=0.1,
     horizontal_flip=True,
+    featurewise_std_normalization=True,
+    samplewise_std_normalization=True,
 )
 
 test_datagen = ImageDataGenerator(
     rescale=1./255,
-    rotation_range=40,
-    width_shift_range=0.1,
-    height_shift_range=0.1,
-    horizontal_flip=True,
 )
 
 val_datagen = ImageDataGenerator(
@@ -38,39 +39,40 @@ val_datagen = ImageDataGenerator(
 train_generator = train_datagen.flow_from_directory(
     train_dir,
     target_size=(224, 224),
-    batch_size=32,
-    class_mode='categorical'
-)
-
-val_generator = val_datagen.flow_from_directory(
-    val_dir,
-    target_size=(224, 224),
-    batch_size=32,
+    batch_size=batch_size,
     class_mode='categorical'
 )
 
 test_generator = test_datagen.flow_from_directory(
     test_dir,
     target_size=(224, 224),
-    batch_size=32,
+    batch_size=batch_size,
     class_mode='categorical'
 )
 
+val_generator = val_datagen.flow_from_directory(
+    val_dir,
+    target_size=(224, 224),
+    batch_size=batch_size,
+    class_mode='categorical'
+)
+
+base_model = ResNet50(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
+for layer in base_model.layers:
+    layer.trainable = True
+
 model = models.Sequential([
-    layers.Conv2D(32, (3, 3), activation='relu', input_shape=(224, 224, 3)),
-    layers.MaxPooling2D((2, 2)),
-    layers.Conv2D(64, (3, 3), activation='relu'),
-    layers.MaxPooling2D((2, 2)),
-    layers.Conv2D(128, (3, 3), activation='relu'),
-    layers.MaxPooling2D((2, 2)),
-    layers.Flatten(),
+    base_model,
+    layers.GlobalAveragePooling2D(),
     layers.Dense(512, activation='relu'),
+    layers.Dropout(0.2),
     layers.Dense(len(cat_to_name), activation='softmax')
 ])
 
 model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
-checkpoint = ModelCheckpoint('coin_classifier.h5', save_best_only=True, monitor='val_loss', mode='min')
+checkpoint = ModelCheckpoint('coin_classifier.keras', save_best_only=True, monitor='val_loss', mode='min')
+early_stopping = EarlyStopping(monitor='val_accuracy', patience=5, restore_best_weights=True)
 
 model.fit(
     train_generator,
@@ -78,10 +80,10 @@ model.fit(
     epochs=20,
     validation_data=val_generator,
     validation_steps=val_generator.samples // val_generator.batch_size,
-    callbacks=[checkpoint]
+    callbacks=[checkpoint, early_stopping]
 )
 
-model.save('coin_classifier_final.h5')
+model.save('coin_classifier_final.keras')
 
 test_loss, test_acc = model.evaluate(test_generator, steps=test_generator.samples // test_generator.batch_size)
 print(f'Test accuracy: {test_acc}')
