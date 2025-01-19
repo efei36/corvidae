@@ -1,0 +1,4 @@
+myenv/
+coins/
+__pycache__/
+*.h5
